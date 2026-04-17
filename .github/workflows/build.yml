@@ -39,12 +39,29 @@ jobs:
             echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
           fi
         
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         if: steps.sync.outputs.has_update == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 17
+          java-version: 21
+
+      - name: Upgrade Gradle
+        if: steps.sync.outputs.has_update == 'true'
+        run: ./gradlew wrapper --gradle-version 9.3.1
+
+      - name: Patch dependencies and repositories
+        if: steps.sync.outputs.has_update == 'true'
+        run: |
+          # Replace old PAPI version with a known working one if found
+          find . -name "build.gradle*" -exec sed -i 's/2.11.2/2.11.7/g' {} +
+          
+          # Ensure helpch and extendedclip repos are present in root build.gradle.kts if missing
+          # This is a bit of a hack but ensures the build works even on old tags
+          if [ -f "build.gradle.kts" ]; then
+            sed -i '/repositories {/a \        maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")' build.gradle.kts
+            sed -i '/repositories {/a \        maven("https://repo.helpch.at/releases")' build.gradle.kts
+          fi
 
       - name: Setup Gradle cache
         if: steps.sync.outputs.has_update == 'true'
