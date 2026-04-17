@@ -56,13 +56,15 @@ jobs:
           # 1. Fix PlaceholderAPI (PAPI) Version
           find . -name "build.gradle*" -exec sed -i 's/2.11.2/2.11.7/g' {} +
 
-          # 2. Upgrade Shadow Plugin (Mandatory for Gradle 8.2+)
-          # Replace legacy ID with modern ID and upgrade version to 8.3.5 or 9.3.1
+          # 2. Upgrade Shadow Plugin (Mandatory for Gradle 9.0+)
+          # Version 9.0.0+ is required because Gradle 9 removed the HasConvention API
           find . -name "build.gradle*" -exec sed -i 's/com.github.johnrengelman.shadow/com.gradleup.shadow/g' {} +
-          find . -name "build.gradle*" -exec sed -i 's/version "7.0.0"/version "8.3.5"/g' {} +
-          find . -name "build.gradle*" -exec sed -i "s/version '7.0.0'/version '8.3.5'/g" {} +
-          find . -name "build.gradle*" -exec sed -i 's/version "8.0.0"/version "8.3.5"/g' {} +
-          find . -name "build.gradle*" -exec sed -i "s/version '8.0.0'/version '8.3.5'/g" {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "7.0.0"/version "9.3.1"/g' {} +
+          find . -name "build.gradle*" -exec sed -i "s/version '7.0.0'/version '9.3.1'/g" {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "8.0.0"/version "9.3.1"/g' {} +
+          find . -name "build.gradle*" -exec sed -i "s/version '8.0.0'/version '9.3.1'/g" {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "8.3.5"/version "9.3.1"/g' {} +
+          find . -name "build.gradle*" -exec sed -i "s/version '8.3.5'/version '9.3.1'/g" {} +
 
           # 3. Upgrade Kotlin Plugin (Mandatory for Gradle 9+)
           # If upstream uses an old Kotlin version (e.g. 1.x), upgrade it to 2.1.0 to work with Gradle 9
