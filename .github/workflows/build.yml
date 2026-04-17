@@ -53,11 +53,15 @@ jobs:
       - name: Patch dependencies and repositories
         if: steps.sync.outputs.has_update == 'true'
         run: |
-          # Replace old PAPI version with a known working one if found
+          # Replace old PAPI version
           find . -name "build.gradle*" -exec sed -i 's/2.11.2/2.11.7/g' {} +
+
+          # Upgrade Shadow plugin from 7.0.0/old ID to modern Gradle 9-compatible version
+          find . -name "build.gradle*" -exec sed -i 's/com.github.johnrengelman.shadow/com.gradleup.shadow/g' {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "7.0.0"/version "9.3.1"/g' {} +
+          find . -name "build.gradle*" -exec sed -i "s/version '7.0.0'/version '9.3.1'/g" {} +
           
-          # Ensure helpch and extendedclip repos are present in root build.gradle.kts if missing
-          # This is a bit of a hack but ensures the build works even on old tags
+          # Ensure helpch and extendedclip repos are present
           if [ -f "build.gradle.kts" ]; then
             sed -i '/repositories {/a \        maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")' build.gradle.kts
             sed -i '/repositories {/a \        maven("https://repo.helpch.at/releases")' build.gradle.kts
