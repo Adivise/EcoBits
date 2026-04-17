@@ -53,19 +53,36 @@ jobs:
       - name: Patch dependencies and repositories
         if: steps.sync.outputs.has_update == 'true'
         run: |
-          # Replace old PAPI version
+          # 1. Fix PlaceholderAPI (PAPI) Version
           find . -name "build.gradle*" -exec sed -i 's/2.11.2/2.11.7/g' {} +
 
-          # Upgrade Shadow plugin from 7.0.0/old ID to modern Gradle 9-compatible version
+          # 2. Upgrade Shadow Plugin (Mandatory for Gradle 8.2+)
+          # Replace legacy ID with modern ID and upgrade version to 8.3.5 or 9.3.1
           find . -name "build.gradle*" -exec sed -i 's/com.github.johnrengelman.shadow/com.gradleup.shadow/g' {} +
-          find . -name "build.gradle*" -exec sed -i 's/version "7.0.0"/version "9.3.1"/g' {} +
-          find . -name "build.gradle*" -exec sed -i "s/version '7.0.0'/version '9.3.1'/g" {} +
-          
-          # Ensure helpch and extendedclip repos are present
-          if [ -f "build.gradle.kts" ]; then
-            sed -i '/repositories {/a \        maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")' build.gradle.kts
-            sed -i '/repositories {/a \        maven("https://repo.helpch.at/releases")' build.gradle.kts
-          fi
+          find . -name "build.gradle*" -exec sed -i 's/version "7.0.0"/version "8.3.5"/g' {} +
+          find . -name "build.gradle*" -exec sed -i "s/version '7.0.0'/version '8.3.5'/g" {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "8.0.0"/version "8.3.5"/g' {} +
+          find . -name "build.gradle*" -exec sed -i "s/version '8.0.0'/version '8.3.5'/g" {} +
+
+          # 3. Upgrade Kotlin Plugin (Mandatory for Gradle 9+)
+          # If upstream uses an old Kotlin version (e.g. 1.x), upgrade it to 2.1.0 to work with Gradle 9
+          find . -name "build.gradle*" -exec sed -i 's/version "1.5.0"/version "2.1.0"/g' {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "1.6.0"/version "2.1.0"/g' {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "1.7.0"/version "2.1.0"/g' {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "1.8.0"/version "2.1.0"/g' {} +
+          find . -name "build.gradle*" -exec sed -i 's/version "1.9.0"/version "2.1.0"/g' {} +
+          find . -name "build.gradle*" -exec sed -i 's/kotlin("jvm") version "1.[0-9].[0-9]*"/kotlin("jvm") version "2.1.0"/g' {} +
+
+          # 4. Inject Missing Repositories
+          # Use a more robust check to add repos to both Groovy and Kotlin DSL
+          for f in $(find . -name "build.gradle*"); do
+            if ! grep -q "repo.extendedclip.com" "$f"; then
+              sed -i '/repositories {/a \        maven { url = uri("https://repo.extendedclip.com/content/repositories/placeholderapi/") }' "$f"
+            fi
+            if ! grep -q "repo.helpch.at" "$f"; then
+              sed -i '/repositories {/a \        maven { url = uri("https://repo.helpch.at/releases") }' "$f"
+            fi
+          done
 
       - name: Setup Gradle cache
         if: steps.sync.outputs.has_update == 'true'
