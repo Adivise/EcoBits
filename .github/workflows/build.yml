@@ -17,47 +17,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve latest upstream tag
+      - name: Sync from upstream (changed files only)
         id: sync
-        run: |
-          git remote add upstream https://github.com/Auxilor/EcoBits.git || true
-          git fetch upstream --tags
+        env:
+          UPSTREAM_URL: https://github.com/Auxilor/EcoBits.git
+        run: bash .github/scripts/sync-upstream.sh
 
-          UPSTREAM_TAG=$(git ls-remote --refs --tags upstream | awk -F/ '{print $3}' | sort -V | tail -n1)
-          if [ -z "$UPSTREAM_TAG" ]; then
-            echo "Could not resolve upstream tag."
-            exit 1
-          fi
-
-          if git ls-remote --exit-code --tags origin "refs/tags/$UPSTREAM_TAG" > /dev/null 2>&1; then
-            echo "Latest upstream tag ($UPSTREAM_TAG) already exists on origin. Skipping build and release."
-            echo "has_update=false" >> $GITHUB_OUTPUT
-          else
-            echo "Building latest upstream tag: $UPSTREAM_TAG"
-            git checkout --detach "tags/$UPSTREAM_TAG"
-            echo "has_update=true" >> $GITHUB_OUTPUT
-            echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
-          fi
-        
       - name: Set up JDK 21
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: 21
 
       - name: Upgrade Gradle
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         run: ./gradlew wrapper --gradle-version 8.12.1
 
       - name: Patch dependencies and repositories
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         run: |
           # 1. Fix PlaceholderAPI (PAPI) Version
           find . -name "build.gradle*" -exec sed -i 's/2.11.2/2.11.7/g' {} +
 
           # 2. Upgrade Shadow Plugin (Mandatory for Java 21)
-          # Version 8.3.5 is the last major 8.x release and stable with Gradle 8.x
           find . -name "build.gradle*" -exec sed -i 's/com.github.johnrengelman.shadow/com.gradleup.shadow/g' {} +
           find . -name "build.gradle*" -exec sed -i 's/version "7.0.0"/version "8.3.5"/g' {} +
           find . -name "build.gradle*" -exec sed -i "s/version '7.0.0'/version '8.3.5'/g" {} +
@@ -66,8 +49,7 @@ jobs:
           find . -name "build.gradle*" -exec sed -i 's/version "9.3.1"/version "8.3.5"/g' {} +
           find . -name "build.gradle*" -exec sed -i "s/version '9.3.1'/version '8.3.5'/g" {} +
 
-          # 3. Upgrade Kotlin Plugin (Mandatory for Gradle 9+)
-          # If upstream uses an old Kotlin version (e.g. 1.x), upgrade it to 2.1.0 to work with Gradle 9
+          # 3. Upgrade Kotlin Plugin
           find . -name "build.gradle*" -exec sed -i 's/version "1.5.0"/version "2.1.0"/g' {} +
           find . -name "build.gradle*" -exec sed -i 's/version "1.6.0"/version "2.1.0"/g' {} +
           find . -name "build.gradle*" -exec sed -i 's/version "1.7.0"/version "2.1.0"/g' {} +
@@ -76,7 +58,6 @@ jobs:
           find . -name "build.gradle*" -exec sed -i 's/kotlin("jvm") version "1.[0-9].[0-9]*"/kotlin("jvm") version "2.1.0"/g' {} +
 
           # 4. Inject Missing Repositories
-          # Use a more robust check to add repos to both Groovy and Kotlin DSL
           for f in $(find . -name "build.gradle*"); do
             if ! grep -q "repo.extendedclip.com" "$f"; then
               sed -i '/repositories {/a \        maven { url = uri("https://repo.extendedclip.com/content/repositories/placeholderapi/") }' "$f"
@@ -87,36 +68,74 @@ jobs:
           done
 
       - name: Setup Gradle cache
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Get Project Version
-        id: version
-        if: steps.sync.outputs.has_update == 'true'
-        run: |
-          VERSION=$(grep '^version' gradle.properties | cut -d'=' -f2 | tr -d ' ' | tr -d '\r')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "tag=$VERSION" >> $GITHUB_OUTPUT
-          echo "name=$VERSION (Auto Build)" >> $GITHUB_OUTPUT
-
       - name: Build
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         run: ./gradlew clean build shadowJar --no-daemon
 
       - name: Verify artifact
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         run: |
+          rm -f bin/*unshaded.jar
           ls -lh bin/*.jar
           sha256sum bin/*.jar
 
+      - name: Commit sync and push
+        id: publish
+        if: steps.sync.outputs.has_update == 'true' || steps.sync.outputs.has_update == 'pointer'
+        env:
+          DEFAULT_BRANCH: ${{ steps.sync.outputs.default_branch }}
+          HAS_UPDATE: ${{ steps.sync.outputs.has_update }}
+          UPSTREAM_SHA: ${{ steps.sync.outputs.upstream_sha }}
+        run: bash .github/scripts/commit-sync.sh
+
       - name: Create Release
-        if: steps.sync.outputs.has_update == 'true'
+        if: steps.sync.outputs.run_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.name }}
-          files: "bin/*.jar"
+          tag_name: ${{ steps.sync.outputs.tag_name }}
+          name: ${{ steps.sync.outputs.release_name }}
+          target_commitish: ${{ steps.publish.outputs.head_sha }}
+          files: bin/*.jar
           body: |
-            Auto-generated build from upstream release tag v${{ steps.version.outputs.tag }}
+            Auto-generated build from upstream Auxilor/EcoBits @ ${{ steps.sync.outputs.upstream_sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Discord
+        if: success() && steps.sync.outputs.run_build == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REL_NAME: ${{ steps.sync.outputs.release_name }}
+          TAG_NAME: ${{ steps.sync.outputs.tag_name }}
+          VERSION: ${{ steps.sync.outputs.gradle_version }}
+          UP_SHA: ${{ steps.sync.outputs.upstream_sha }}
+        run: |
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "DISCORD_WEBHOOK_URL secret not set; skipping Discord."
+            exit 0
+          fi
+          rel_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
+          jq -n \
+            --arg title "EcoBits Updated — v${REL_NAME}" \
+            --arg url "$rel_url" \
+            --arg tag "$TAG_NAME" \
+            --arg sha "$UP_SHA" \
+            --arg ver "$VERSION" \
+            --arg rep "$GITHUB_REPOSITORY" \
+            --arg dl_url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoBits.v${VERSION}.jar" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 8947848,
+                fields: [
+                  { name: "Tag", value: $tag, inline: true },
+                  { name: "Upstream SHA", value: ("`" + $sha + "`"), inline: false },
+                  { name: "Direct DL", value: ("[Click Me](" + $dl_url + ")"), inline: false }
+                ],
+                footer: { text: ("GitHub Actions · " + $rep) }
+              }]
+            }' | curl -fsS -X POST -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
