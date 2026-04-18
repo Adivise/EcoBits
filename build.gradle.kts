@@ -5,7 +5,7 @@ plugins {
     id("java")
     id("java-library")
     id("maven-publish")
-    id("com.gradleup.shadow") version "9.3.1"
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 group = "com.willfp"
@@ -28,6 +28,7 @@ allprojects {
     apply(plugin = "com.gradleup.shadow")
 
     repositories {
+        maven { url = uri("https://repo.extendedclip.com/content/repositories/placeholderapi/") }
         mavenCentral()
         mavenLocal()
 

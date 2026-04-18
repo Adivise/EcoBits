@@ -26,6 +26,8 @@ publishing {
 
     publishing {
         repositories {
+        maven { url = uri("https://repo.helpch.at/releases") }
+        maven { url = uri("https://repo.extendedclip.com/content/repositories/placeholderapi/") }
             maven {
                 name = "Auxilor"
                 url = uri("https://repo.auxilor.io/repository/maven-releases/")
