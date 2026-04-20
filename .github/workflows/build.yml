@@ -97,24 +97,57 @@ jobs:
         if: steps.check.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Build
+      - name: Build with Retry
+        id: build
         if: steps.check.outputs.run_build == 'true'
-        run: ./gradlew clean build shadowJar --no-daemon
+        run: |
+          MAX_RETRIES=3
+          COUNT=0
+          SUCCESS=false
+          
+          # Increase gradle wrapper timeout to 60s
+          export GRADLE_OPTS="-Dorg.gradle.internal.http.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000"
+
+          while [ $COUNT -lt $MAX_RETRIES ]; do
+            COUNT=$((COUNT+1))
+            echo "Build attempt $COUNT of $MAX_RETRIES..."
+            
+            if ./gradlew clean shadowJar --no-daemon; then
+              SUCCESS=true
+              break
+            fi
+            
+            echo "Build attempt $COUNT failed. Waiting 15s to retry..."
+            sleep 15
+          done
+
+          if [ "$SUCCESS" = "true" ]; then
+            echo "fallback=false" >> $GITHUB_OUTPUT
+            echo "version=${{ steps.check.outputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "Stable build failed after $MAX_RETRIES attempts. Falling back to master branch."
+            git checkout master
+            ./gradlew clean shadowJar --no-daemon
+            VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "fallback=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create Stable Release
         if: steps.check.outputs.run_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.check.outputs.tag_name }}
-          name: ${{ env.PLUGIN_NAME }} v${{ steps.check.outputs.version }} (Stable Build)
+          name: ${{ env.PLUGIN_NAME }} v${{ steps.build.outputs.version }} (Stable Build)
           files: |
             bin/*.jar
             !bin/*unshaded*.jar
           prerelease: false
           make_latest: true
           body: |
-            ## [STABLE] ${{ env.PLUGIN_NAME }} Ã¢â‚¬â€ v${{ steps.check.outputs.version }}
+            ## [STABLE] ${{ env.PLUGIN_NAME }} — v${{ steps.build.outputs.version }} ${{ steps.build.outputs.fallback == 'true' && '(Fallback Build)' || '' }}
             Auto-generated stable build from upstream tag `${{ steps.check.outputs.tag_name }}`.
+            ${{ steps.build.outputs.fallback == 'true' && '> The build for the original tag failed. This release was generated using the latest development code as a fallback.' || '' }}
 
             **Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
         env:
@@ -219,9 +252,34 @@ jobs:
         if: steps.sync.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Build
+      - name: Build with Retry
+        id: build_dev
         if: steps.sync.outputs.run_build == 'true'
-        run: ./gradlew clean build shadowJar --no-daemon
+        run: |
+          MAX_RETRIES=3
+          COUNT=0
+          SUCCESS=false
+          
+          # Increase gradle wrapper timeout to 60s
+          export GRADLE_OPTS="-Dorg.gradle.internal.http.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000"
+
+          while [ $COUNT -lt $MAX_RETRIES ]; do
+            COUNT=$((COUNT+1))
+            echo "Build attempt $COUNT of $MAX_RETRIES..."
+            
+            if ./gradlew clean shadowJar --no-daemon; then
+              SUCCESS=true
+              break
+            fi
+            
+            echo "Build attempt $COUNT failed. Waiting 15s to retry..."
+            sleep 15
+          done
+
+          if [ "$SUCCESS" = "false" ]; then
+             echo "Dev build failed after $MAX_RETRIES attempts."
+             exit 1
+          fi
 
       - name: Commit sync and push
         id: publish
