@@ -25,6 +25,8 @@ jobs:
 
       - name: Resolve latest upstream tag
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git remote add upstream https://github.com/Auxilor/${{ env.PLUGIN_NAME }}.git || true
           git fetch upstream --tags --force
@@ -111,7 +113,7 @@ jobs:
           prerelease: false
           make_latest: true
           body: |
-            ## [STABLE] ${{ env.PLUGIN_NAME }} — v${{ steps.check.outputs.version }}
+            ## [STABLE] ${{ env.PLUGIN_NAME }} Ã¢â‚¬â€ v${{ steps.check.outputs.version }}
             Auto-generated stable build from upstream tag `${{ steps.check.outputs.tag_name }}`.
 
             **Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
