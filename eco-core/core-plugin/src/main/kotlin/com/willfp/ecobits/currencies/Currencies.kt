@@ -6,10 +6,14 @@ import com.google.common.collect.ImmutableList
 import com.google.common.collect.Maps
 import com.willfp.eco.core.Eco
 import com.willfp.eco.core.price.Prices
+import com.willfp.ecobits.commands.CommandPayShortcut
 import com.willfp.ecobits.plugin
+import org.bukkit.Bukkit
 
 object Currencies {
     private val BY_ID: BiMap<String, Currency> = Maps.synchronizedBiMap(HashBiMap.create())
+
+    private var payShortcut: CommandPayShortcut? = null
 
     /**
      * Get all registered [Currency]s.
@@ -39,6 +43,8 @@ object Currencies {
     fun update() {
         Eco.get().beginCommandBatch()
         try {
+            Bukkit.getServicesManager().unregisterAll(plugin)
+
             for (currency in values()) {
                 removeCurrency(currency)
             }
@@ -46,6 +52,11 @@ object Currencies {
             for (config in plugin.configYml.getSubsections("currencies")) {
                 addNewCurrency(Currency(config.getString("id"), plugin, config))
             }
+
+            payShortcut?.unregister()
+            payShortcut = values().firstOrNull { it.isRegisteredWithVault }
+                ?.takeIf { plugin.configYml.getBool("pay-command") }
+                ?.let { CommandPayShortcut(it).apply { register() } }
         } finally {
             Eco.get().endCommandBatch()
         }
@@ -69,6 +80,7 @@ object Currencies {
      */
     @JvmStatic
     fun removeCurrency(currency: Currency) {
+        currency.shutdown()
         Prices.unregisterPriceFactory(currency.priceFactory)
         BY_ID.remove(currency.id)
     }

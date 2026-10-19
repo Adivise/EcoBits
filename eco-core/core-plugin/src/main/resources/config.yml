@@ -33,6 +33,8 @@
 
 server-id: "main" # Server ID for local currencies over MySQL/MongoDB.
 
+pay-command: false # If true, /pay <player> <amount> pays in the currency registered with vault. The currency must be payable.
+
 leaderboard:
   # You can disable the top leaderboard if you don't want it.
   # Please note that it will require a full server restart to take into effect.
@@ -54,7 +56,7 @@ currencies:
     payable: false # If players should be able to use /ecobits pay to pay other players
     decimal: true # If decimal amounts are allowed in commands, rather than just integer amounts.
     max-decimals: 2 # How many decimals should we allow the players to type in commands.
-    vault: false # If this currency should be registered with vault. (Only one currency can be registered with vault, requires server restart)
+    vault: false # If this currency should be registered with vault. (Only one currency can be registered with vault)
     local: false # If this currency should not sync between servers.
     balance-shorthand: false # If this currency main command (/crystals) should act as balance command
     format: "&b%symbol%&a%amount% &b%currency%" # The formatted balance. (Placeholders: %currency%, %amount%, %symbol%)
