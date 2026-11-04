@@ -58,9 +58,27 @@ OLD_SHA="$(printf '%s\n' "$SYNC_CONTENT" | grep '^UPSTREAM_SHA=' | head -1 | cut
 OLD_VER="$(git show "origin/${DEFAULT_BRANCH}:gradle.properties" 2>/dev/null | grep -E '^version[[:space:]]*=' | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//' || true)"
 
 if [ -n "$OLD_SHA" ] && [ "$OLD_SHA" = "$NEW_SHA" ]; then
-  echo "Upstream unchanged ($NEW_SHA). Skipping."
-  echo "has_update=false" >> "$GITHUB_OUTPUT"
-  echo "run_build=false" >> "$GITHUB_OUTPUT"
+  PV="$OLD_VER"
+  TAG_PREFIX="v"
+  if ! git ls-remote --tags upstream "refs/tags/v*" | grep -q .; then
+    TAG_PREFIX=""
+  fi
+  DEV_TAG="${TAG_PREFIX}${PV}-dev"
+  DEV_JARS="$(gh release view "$DEV_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name | select(endswith(".jar"))] | length' 2>/dev/null || echo "0")"
+
+  if [ "$DEV_JARS" -gt 0 ]; then
+    echo "Upstream unchanged ($NEW_SHA), and $DEV_TAG already has a JAR. Skipping."
+    echo "has_update=false" >> "$GITHUB_OUTPUT"
+    echo "run_build=false" >> "$GITHUB_OUTPUT"
+  else
+    echo "Upstream unchanged ($NEW_SHA), but $DEV_TAG is missing a JAR. Rebuilding the dev release."
+    echo "gradle_version=$PV" >> "$GITHUB_OUTPUT"
+    echo "tag_name=$DEV_TAG" >> "$GITHUB_OUTPUT"
+    echo "release_name=${PV} (Dev Build)" >> "$GITHUB_OUTPUT"
+    echo "build_kind=rebuild" >> "$GITHUB_OUTPUT"
+    echo "has_update=false" >> "$GITHUB_OUTPUT"
+    echo "run_build=true" >> "$GITHUB_OUTPUT"
+  fi
   exit 0
 fi
 
