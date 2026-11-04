@@ -141,7 +141,6 @@ jobs:
           name: ${{ env.PLUGIN_NAME }} v${{ steps.build.outputs.version }} (Stable Build)
           files: |
             bin/*.jar
-            !bin/*unshaded*.jar
           fail_on_unmatched_files: true
           prerelease: false
           make_latest: true
@@ -301,7 +300,6 @@ jobs:
           target_commitish: ${{ steps.publish.outputs.head_sha || github.sha }}
           files: |
             bin/*.jar
-            !bin/*unshaded*.jar
           fail_on_unmatched_files: true
           prerelease: true
           make_latest: false
